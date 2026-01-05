@@ -1,10 +1,12 @@
 # main.tf
-data "google_client_config" "this" {}
-
-data "google_project" "project" {
-  project_id = var.project_id
+terraform {
+  required_providers {
+    google = {
+      source  = "hashicorp/google"
+      version = "~> 5.0"
+    }
+  }
 }
-
 
 resource "google_vertex_ai_reasoning_engine" "reasoning_engine" { # The core reasoning engine resource
   display_name = "Terraform"
@@ -34,39 +36,22 @@ resource "google_service_account" "reasoning_engine_sa" {
   display_name = "Reasoning Engine Service Account"
 }
 
-resource "google_project_iam_member" "sa_aiplatform_user" {
-  project = var.project_id
-  role    = "roles/aiplatform.user"
-  member  = google_service_account.reasoning_engine_sa.member
-  depends_on = [
-    google_project_service.aiplatform_api
-  ]
+locals {
+  sa_roles = toset([
+    "roles/aiplatform.user",
+    "roles/storage.objectViewer",
+    "roles/logging.logWriter",
+    "roles/secretmanager.secretAccessor",
+  ])
 }
 
-resource "google_project_iam_member" "sa_storage_object_viewer" {
-  project = var.project_id
-  role    = "roles/storage.objectViewer"
-  member  = google_service_account.reasoning_engine_sa.member
+resource "google_project_iam_member" "reasoning_engine_sa_roles" {
+  for_each = local.sa_roles
+  project  = var.project_id
+  role     = each.key
+  member   = google_service_account.reasoning_engine_sa.member
   depends_on = [
-    google_project_service.storage_api
-  ]
-}
-
-resource "google_project_iam_member" "sa_logging_log_writer" {
-  project = var.project_id
-  role    = "roles/logging.logWriter"
-  member  = google_service_account.reasoning_engine_sa.member
-  depends_on = [
-    google_project_service.logging_api
-  ]
-}
-
-resource "google_project_iam_member" "sa_secret_accessor" {
-  project = var.project_id
-  role    = "roles/secretmanager.secretAccessor"
-  member  = google_service_account.reasoning_engine_sa.member
-  depends_on = [
-    google_project_service.secretmanager_api
+    google_project_service.project_apis
   ]
 }
 
@@ -91,40 +76,21 @@ provider "google" {
   region  = var.region
 }
 
-resource "google_project_service" "aiplatform_api" {
-  project            = var.project_id
-  service            = "aiplatform.googleapis.com"
-  disable_on_destroy = false
+locals {
+  apis_to_enable = toset([
+    "aiplatform.googleapis.com",
+    "secretmanager.googleapis.com",
+    "cloudbuild.googleapis.com",
+    "logging.googleapis.com",
+    "monitoring.googleapis.com",
+    "storage.googleapis.com",
+  ])
 }
 
-resource "google_project_service" "secretmanager_api" {
+resource "google_project_service" "project_apis" {
+  for_each           = local.apis_to_enable
   project            = var.project_id
-  service            = "secretmanager.googleapis.com"
-  disable_on_destroy = false
-}
-
-# New API enablements
-resource "google_project_service" "cloudbuild_api" {
-  project            = var.project_id
-  service            = "cloudbuild.googleapis.com"
-  disable_on_destroy = false
-}
-
-resource "google_project_service" "logging_api" {
-  project            = var.project_id
-  service            = "logging.googleapis.com"
-  disable_on_destroy = false
-}
-
-resource "google_project_service" "monitoring_api" {
-  project            = var.project_id
-  service            = "monitoring.googleapis.com"
-  disable_on_destroy = false
-}
-
-resource "google_project_service" "storage_api" {
-  project            = var.project_id
-  service            = "storage.googleapis.com"
+  service            = each.key
   disable_on_destroy = false
 }
 
@@ -135,7 +101,7 @@ resource "google_storage_bucket" "vertex_ai_staging_bucket" {
   uniform_bucket_level_access = true
   force_destroy               = true # Be cautious with this in production environments
   depends_on = [
-    google_project_service.storage_api
+    google_project_service.project_apis
   ]
 }
 
@@ -165,7 +131,7 @@ resource "google_secret_manager_secret" "agent_secret" {
     auto {}
   }
   depends_on = [
-    google_project_service.secretmanager_api
+    google_project_service.project_apis["secretmanager.googleapis.com"]
   ]
 }
 
@@ -179,9 +145,11 @@ resource "time_sleep" "wait_for_iam_propagation" {
   create_duration = "60s"
 
   depends_on = [
-    google_project_iam_member.sa_aiplatform_user,
-    google_project_iam_member.sa_storage_object_viewer,
-    google_project_iam_member.sa_logging_log_writer,
-    google_project_iam_member.sa_secret_accessor
+    google_project_iam_member.reasoning_engine_sa_roles
   ]
+}
+
+output "reasoning_engine_name" {
+  description = "The full resource name of the deployed Vertex AI Reasoning Engine."
+  value       = google_vertex_ai_reasoning_engine.reasoning_engine.name
 }
