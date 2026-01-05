@@ -15,25 +15,34 @@
 """Deployment script for Financial Advisor"""
 
 import os
+import sys
+
+# Add project root to the Python path
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 import vertexai
-from dotenv import load_dotenv
-from financial_advisor.agent import root_agent
+from dotenv import load_dotenv, dotenv_values
+from agent.agent import root_agent
 from vertexai import agent_engines
 from vertexai.preview.reasoning_engines import AdkApp
 
-def create() -> None:
+
+def create(location: str) -> None:
     """Creates an agent engine for Financial Advisors with telemetry enabled."""
-    # AdkApp wraps our agent logic for deployment. 
+    # AdkApp wraps our agent logic for deployment.
     # enable_tracing=True enables application-level tracing.
-    adk_app = AdkApp(agent=root_agent, enable_tracing=True)
+    adk_app = AdkApp(
+        agent=root_agent,
+        enable_tracing=True,
+    )
 
     print(f"Deploying agent: {root_agent.name}...")
 
     # Deploy the agent to Vertex AI Agent Engine
     remote_agent = agent_engines.create(
-        adk_app,
+        agent_engine=adk_app,
         display_name=root_agent.name,
+        extra_packages=["agent/sub_agents"],
         requirements=[
             "google-adk (>=0.0.2)",
             "google-cloud-aiplatform[agent_engines] (>=1.91.0,!=1.92.0)",
@@ -73,11 +82,17 @@ def list_agents() -> None:
 
 def main() -> None:
     """Main deployment flow."""
-    load_dotenv()
+    # load_dotenv()
 
-    project_id = os.getenv("GOOGLE_CLOUD_PROJECT")
-    location = os.getenv("GOOGLE_CLOUD_LOCATION")
-    bucket = os.getenv("GOOGLE_CLOUD_STORAGE_BUCKET")
+    # project_id = os.getenv("GOOGLE_CLOUD_PROJECT")
+    # location = os.getenv("GOOGLE_CLOUD_LOCATION")
+    # bucket = os.getenv("GOOGLE_CLOUD_STORAGE_BUCKET")
+
+    config = dotenv_values(".env")
+    
+    project_id = config.get("GOOGLE_CLOUD_PROJECT")
+    location = config.get("GOOGLE_CLOUD_LOCATION")
+    bucket = config.get("GOOGLE_CLOUD_STORAGE_BUCKET")
 
     print(f"PROJECT: {project_id}")
     print(f"LOCATION: {location}")
@@ -100,7 +115,7 @@ def main() -> None:
     )
 
     # Simplified to always create by default in the main demo flow
-    create()
+    create(location=location)
 
 
 

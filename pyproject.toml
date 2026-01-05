@@ -2,7 +2,7 @@
 name = "financial-advisor"
 version = "0.1.0"
 description = "AI-driven agent designed to facilitate the exploration of the financial advisor landscape"
-authors = [{ name = "Antonio Gulli", email = "gulli@google.com" }]
+authors = [{ name = "", email = "" }]
 license = "Apache-2.0"
 readme = "README.md"
 dependencies = [
@@ -97,4 +97,4 @@ module-root = ""
 example_question = "Analyze AAPL"
 
 [tool.agent-starter-pack.settings]
-agent_directory = "financial_advisor"
+agent_directory = "agent"

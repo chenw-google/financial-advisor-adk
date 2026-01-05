@@ -1,0 +1,4 @@
+GEMINI.md
+.pytest_cache/
+__pycache__/
+.adk/
